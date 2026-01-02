@@ -79,46 +79,99 @@ try
             return;
     }
 
-    Console.WriteLine($"\nFetching usage report from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
-    var report = await apiClient.GetInstallationReportAsync(installationId, fromDate, toDate);
+    // Ask user what type of report to generate
+    Console.WriteLine("\nSelect report type:");
+    Console.WriteLine("1. Summary report (aggregated by user)");
+    Console.WriteLine("2. Detailed session report (all individual sessions)");
+    Console.Write("\nEnter your choice (1-2): ");
 
-    if (report == null)
-    {
-        Console.WriteLine("No report data received.");
-        return;
-    }
+    var reportChoice = Console.ReadLine();
 
-    // Display report
-    Console.WriteLine($"\nInstallation: {report.InstallationName}");
-    Console.WriteLine($"Address: {report.InstallationAddress}, {report.InstallationZipCode} {report.InstallationCity}");
-    Console.WriteLine($"Time Zone: {report.InstallationTimeZone}");
-    Console.WriteLine($"Report Period: {report.FromDate:yyyy-MM-dd} to {report.EndDate:yyyy-MM-dd}");
-    Console.WriteLine($"\nUser Charge Sessions:");
-    Console.WriteLine("─────────────────────────────────────────────────────────────────");
+    if (reportChoice == "1")
+    {
+        // Summary report
+        Console.WriteLine($"\nFetching summary report from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
+        var report = await apiClient.GetInstallationReportAsync(installationId, fromDate, toDate);
 
-    if (report.TotalUserChargerReportModel.Count == 0)
-    {
-        Console.WriteLine("No charge sessions found in this period.");
-    }
-    else
-    {
-        foreach (var userReport in report.TotalUserChargerReportModel)
+        if (report == null)
         {
-            Console.WriteLine($"\nUser: {userReport.UserDetails?.FullName ?? "Unknown"} ({userReport.UserDetails?.Email ?? "N/A"})");
-            Console.WriteLine($"  Sessions: {userReport.TotalChargeSessionCount}");
-            Console.WriteLine($"  Energy: {userReport.TotalChargeSessionEnergy:F2} kWh");
-            Console.WriteLine($"  Duration: {TimeSpan.FromSeconds(userReport.TotalChargeSessionDuration):d\\.hh\\:mm\\:ss}");
+            Console.WriteLine("No report data received.");
+            return;
+        }
+
+        // Display report
+        Console.WriteLine($"\nInstallation: {report.InstallationName}");
+        Console.WriteLine($"Address: {report.InstallationAddress}, {report.InstallationZipCode} {report.InstallationCity}");
+        Console.WriteLine($"Time Zone: {report.InstallationTimeZone}");
+        Console.WriteLine($"Report Period: {report.FromDate:yyyy-MM-dd} to {report.EndDate:yyyy-MM-dd}");
+        Console.WriteLine($"\nUser Charge Sessions:");
+        Console.WriteLine("─────────────────────────────────────────────────────────────────");
+
+        if (report.TotalUserChargerReportModel.Count == 0)
+        {
+            Console.WriteLine("No charge sessions found in this period.");
+        }
+        else
+        {
+            foreach (var userReport in report.TotalUserChargerReportModel)
+            {
+                Console.WriteLine($"\nUser: {userReport.UserDetails?.FullName ?? "Unknown"} ({userReport.UserDetails?.Email ?? "N/A"})");
+                Console.WriteLine($"  Sessions: {userReport.TotalChargeSessionCount}");
+                Console.WriteLine($"  Energy: {userReport.TotalChargeSessionEnergy:F2} kWh");
+                Console.WriteLine($"  Duration: {TimeSpan.FromSeconds(userReport.TotalChargeSessionDuration):d\\.hh\\:mm\\:ss}");
+            }
+
+            // Summary
+            var totalSessions = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionCount);
+            var totalEnergy = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionEnergy);
+            var totalDuration = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionDuration);
+
+            Console.WriteLine("\n─────────────────────────────────────────────────────────────────");
+            Console.WriteLine($"Total Sessions: {totalSessions}");
+            Console.WriteLine($"Total Energy: {totalEnergy:F2} kWh");
+            Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
+        }
+    }
+    else if (reportChoice == "2")
+    {
+        // Detailed session report
+        Console.WriteLine($"\nFetching detailed charge sessions from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
+        var sessions = await apiClient.GetChargeHistoryAsync(installationId, fromDate, toDate);
+
+        if (sessions.Count == 0)
+        {
+            Console.WriteLine("No charge sessions found in this period.");
+            return;
+        }
+
+        Console.WriteLine($"\nFound {sessions.Count} charge session(s)");
+        Console.WriteLine("═════════════════════════════════════════════════════════════════\n");
+
+        foreach (var session in sessions.OrderBy(s => s.StartDateTime))
+        {
+            var duration = session.EndDateTime - session.StartDateTime;
+            Console.WriteLine($"Session: {session.Id}");
+            Console.WriteLine($"  User: {session.UserFullName} ({session.UserEmail})");
+            Console.WriteLine($"  Charger: {session.ChargerName} ({session.DeviceName})");
+            Console.WriteLine($"  Start: {session.StartDateTime:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"  End: {session.EndDateTime:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"  Duration: {duration.Days}.{duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}");
+            Console.WriteLine($"  Energy: {session.Energy:F2} kWh");
+            Console.WriteLine("─────────────────────────────────────────────────────────────────");
         }
 
         // Summary
-        var totalSessions = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionCount);
-        var totalEnergy = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionEnergy);
-        var totalDuration = report.TotalUserChargerReportModel.Sum(u => u.TotalChargeSessionDuration);
+        var totalEnergy = sessions.Sum(s => s.Energy);
+        var totalDuration = sessions.Sum(s => (s.EndDateTime - s.StartDateTime).TotalSeconds);
 
-        Console.WriteLine("\n─────────────────────────────────────────────────────────────────");
-        Console.WriteLine($"Total Sessions: {totalSessions}");
+        Console.WriteLine($"\nTotal Sessions: {sessions.Count}");
         Console.WriteLine($"Total Energy: {totalEnergy:F2} kWh");
         Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
+    }
+    else
+    {
+        Console.WriteLine("Invalid choice. Exiting.");
+        return;
     }
 }
 catch (Exception ex)

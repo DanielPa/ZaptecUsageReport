@@ -92,4 +92,67 @@ public class ZaptecApiClient
 
         return report;
     }
+
+    public async Task<List<ChargeSession>> GetChargeHistoryAsync(string? installationId = null, DateTime? fromDate = null, DateTime? toDate = null, int pageSize = 100)
+    {
+        if (string.IsNullOrEmpty(_accessToken) || DateTime.UtcNow >= _tokenExpiry)
+        {
+            throw new Exception("Not authenticated or token expired. Please authenticate first.");
+        }
+
+        var allSessions = new List<ChargeSession>();
+        var currentPage = 0;
+        var totalPages = 1;
+
+        while (currentPage < totalPages)
+        {
+            var request = new RestRequest("/api/chargehistory", Method.Get);
+            request.AddHeader("accept", "application/json");
+            request.AddHeader("Authorization", $"Bearer {_accessToken}");
+
+            // Add query parameters
+            request.AddParameter("PageSize", pageSize);
+            request.AddParameter("PageIndex", currentPage);
+
+            if (!string.IsNullOrEmpty(installationId))
+            {
+                request.AddParameter("InstallationId", installationId);
+            }
+
+            if (fromDate.HasValue)
+            {
+                var fromDateStr = $"{fromDate.Value.Year:D4}-{fromDate.Value.Month:D2}-{fromDate.Value.Day:D2}T00:00:00";
+                request.AddParameter("From", fromDateStr);
+            }
+
+            if (toDate.HasValue)
+            {
+                var toDateStr = $"{toDate.Value.Year:D4}-{toDate.Value.Month:D2}-{toDate.Value.Day:D2}T23:59:59";
+                request.AddParameter("To", toDateStr);
+            }
+
+            var response = await _client.ExecuteAsync(request);
+
+            if (!response.IsSuccessful || response.Content == null)
+            {
+                throw new Exception($"Failed to get charge history: {response.ErrorMessage ?? response.StatusCode.ToString()}");
+            }
+
+            var historyResponse = JsonSerializer.Deserialize<ChargeHistoryResponse>(response.Content, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (historyResponse == null)
+            {
+                break;
+            }
+
+            allSessions.AddRange(historyResponse.Data);
+            totalPages = historyResponse.Pages;
+            currentPage++;
+        }
+
+        return allSessions;
+    }
 }

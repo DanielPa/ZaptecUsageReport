@@ -8,10 +8,19 @@ namespace ZaptecUsageReport.Services;
 public class PdfExportService
 {
     private readonly double _costPerKwh;
+    private readonly string _employee;
+    private readonly string _address;
+    private readonly string _vehicleLicensePlate;
+    private readonly string _vehicleModel;
 
-    public PdfExportService(double costPerKwh = 0.25)
+    public PdfExportService(double costPerKwh = 0.25, string employee = "", string address = "",
+        string vehicleLicensePlate = "", string vehicleModel = "")
     {
         _costPerKwh = costPerKwh;
+        _employee = employee;
+        _address = address;
+        _vehicleLicensePlate = vehicleLicensePlate;
+        _vehicleModel = vehicleModel;
     }
 
     public string GeneratePdfReport(
@@ -64,52 +73,74 @@ public class PdfExportService
             // Title
             column.Item().Background(Colors.Blue.Darken2).Padding(10).Row(row =>
             {
-                row.RelativeItem().AlignLeft().Text("Zaptec Usage Report")
+                row.RelativeItem().AlignLeft().Text("Ladebericht")
                     .FontSize(18)
                     .Bold()
                     .FontColor(Colors.White);
 
-                row.RelativeItem().AlignRight().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}")
+                row.RelativeItem().AlignRight().Text($"{DateTime.Now:dd.MM.yyyy HH:mm}")
                     .FontSize(10)
                     .FontColor(Colors.White);
             });
 
-            // Installation and Date Range
-            column.Item().PaddingTop(15).PaddingBottom(10).Row(row =>
+            // Summary Information Section (German labels like Excel template)
+            column.Item().PaddingTop(15).PaddingBottom(10).Table(table =>
             {
-                row.RelativeItem().Column(col =>
+                // Define two columns for labels and values
+                table.ColumnsDefinition(columns =>
                 {
-                    col.Item().Text($"Installation: {installationName}")
-                        .FontSize(12)
-                        .Bold();
-
-                    col.Item().Text($"Report Period: {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}")
-                        .FontSize(11);
+                    columns.RelativeColumn(2f);   // Label column (left)
+                    columns.RelativeColumn(3f);   // Value column (left)
+                    columns.RelativeColumn(0.5f); // Spacer
+                    columns.RelativeColumn(2.5f); // Label column (right)
+                    columns.RelativeColumn(2f);   // Value column (right)
                 });
 
-                row.RelativeItem().AlignRight().Column(col =>
-                {
-                    col.Item().Text($"Total Sessions: {totalSessions}")
-                        .FontSize(11)
-                        .Bold();
+                // Row 1: Mitarbeiter | Exportdatum
+                table.Cell().Text("Mitarbeiter:").FontSize(10).Bold();
+                table.Cell().Text(_employee ?? "").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Exportdatum:").FontSize(10).Bold();
+                table.Cell().Text($"{DateTime.Now:dd.MM.yyyy HH:mm}").FontSize(10);
 
-                    col.Item().Text($"Total Energy: {totalEnergy:F2} kWh")
-                        .FontSize(11)
-                        .Bold();
+                // Row 2: Adresse | Abfrage-Zeitraum
+                table.Cell().Text("Adresse:").FontSize(10).Bold();
+                table.Cell().Text(_address ?? "").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Abfrage-Zeitraum:").FontSize(10).Bold();
+                table.Cell().Text($"{fromDate:dd.MM.yyyy} - {toDate:dd.MM.yyyy}").FontSize(10);
 
-                    col.Item().Text($"Total Cost: €{totalCost:F2}")
-                        .FontSize(11)
-                        .Bold()
-                        .FontColor(Colors.Green.Darken2);
+                // Row 3: Kennzeichen | Anzahl Sessions
+                table.Cell().Text("Kennzeichen:").FontSize(10).Bold();
+                table.Cell().Text(_vehicleLicensePlate ?? "").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Anzahl Ladesitzungen:").FontSize(10).Bold();
+                table.Cell().Text($"{totalSessions}").FontSize(10);
 
-                    col.Item().Text($"Total Duration: {totalDuration.Days}d {totalDuration.Hours}h {totalDuration.Minutes}m")
-                        .FontSize(11)
-                        .Bold();
-                });
+                // Row 4: Modell | Gesamtladeleistung (kWh)
+                table.Cell().Text("Fahrzeug-Modell:").FontSize(10).Bold();
+                table.Cell().Text(_vehicleModel ?? "").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Gesamtladeleistung (kWh):").FontSize(10).Bold();
+                table.Cell().Text($"{totalEnergy:F2}").FontSize(10);
+
+                // Row 5: Empty | Strompreis pro kWh (brutto)
+                table.Cell().Text("").FontSize(10);
+                table.Cell().Text("").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Strompreis pro kWh (brutto):").FontSize(10).Bold();
+                table.Cell().Text($"{_costPerKwh:F3} €").FontSize(10);
+
+                // Row 6: Empty | Gesamtkosten (brutto)
+                table.Cell().Text("").FontSize(10);
+                table.Cell().Text("").FontSize(10);
+                table.Cell().Text(""); // Spacer
+                table.Cell().Text("Gesamtkosten (brutto):").FontSize(10).Bold();
+                table.Cell().Text($"{totalCost:F2} €").FontSize(10).Bold().FontColor(Colors.Green.Darken2);
             });
 
             // Separator line
-            column.Item().PaddingTop(5).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+            column.Item().PaddingTop(10).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
         });
     }
 
@@ -132,13 +163,13 @@ public class PdfExportService
             // Table Header
             table.Header(header =>
             {
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Session ID").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Device ID").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Start Date/Time").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("End Date/Time").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Duration").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Energy (kWh)").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Cost (EUR)").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Sitzungs ID").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Geräte ID").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Start").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Ende").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Dauer").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Energie").Bold();
+                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Kosten").Bold();
 
                 static IContainer CellStyle(IContainer container)
                 {
@@ -174,18 +205,18 @@ public class PdfExportService
 
                 // Duration (HH:MM format)
                 table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text($"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}");
+                    .Text($"{(int)duration.TotalHours:D2}:{duration.Minutes:D2} h");
 
                 // Energy
                 table.Cell().Element(c => CellStyle(c, bgColor))
                     .AlignRight()
-                    .Text($"{session.Energy:F2}");
+                    .Text($"{session.Energy:F2} kWh");
 
                 // Cost (calculated from energy * cost per kWh)
                 var sessionCost = session.Energy * _costPerKwh;
                 table.Cell().Element(c => CellStyle(c, bgColor))
                     .AlignRight()
-                    .Text($"€{sessionCost:F2}");
+                    .Text($"{sessionCost:F2} €");
 
                 rowIndex++;
             }

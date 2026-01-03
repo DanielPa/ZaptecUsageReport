@@ -287,10 +287,15 @@ try
                 var pdfFileName = $"{baseFileName}.pdf";
                 pdfPath = Path.Combine(outputDir, pdfFileName);
 
-                // Get cost per kWh from configuration
-                var costPerKwh = double.Parse(configuration["Pricing:CostPerKwh"] ?? "0.25");
+                // Get pricing and report info from configuration
+                var costPerKwhString = configuration["Pricing:CostPerKwh"] ?? "0.25";
+                var costPerKwh = double.Parse(costPerKwhString.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
+                var employee = configuration["ReportInfo:Employee"] ?? "";
+                var address = configuration["ReportInfo:Address"] ?? "";
+                var licensePlate = configuration["ReportInfo:VehicleLicensePlate"] ?? "";
+                var model = configuration["ReportInfo:VehicleModel"] ?? "";
 
-                var pdfService = new PdfExportService(costPerKwh);
+                var pdfService = new PdfExportService(costPerKwh, employee, address, licensePlate, model);
                 pdfService.GeneratePdfReport(sessions, installationName, fromDate, toDate, pdfPath);
 
                 if (isServiceMode)

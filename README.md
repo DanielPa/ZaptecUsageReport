@@ -229,10 +229,10 @@ Add email settings to `appsettings.json`:
 ```json
 {
   "Email": {
-    "SmtpServer": "smtp.gmail.com",
-    "SmtpPort": 587,
+    "SmtpServer": "posteo.de",
+    "SmtpPort": 465,
     "UseSsl": true,
-    "FromEmail": "noreply@yourdomain.com",
+    "FromEmail": "your-email@posteo.de",
     "FromName": "Zaptec Report Service",
     "ToEmails": ["recipient@example.com"],
     "CcEmails": [],
@@ -242,7 +242,11 @@ Add email settings to `appsettings.json`:
 }
 ```
 
-For Gmail, use an [App Password](https://myaccount.google.com/apppasswords) instead of your regular password.
+**Note for Posteo users:**
+- Create an App Password for SMTP access
+- Visit https://posteo.de/en/help/app-passwords for instructions
+- Use your Posteo email address as `Email__Username` in environment variables
+- Use the generated app password as `Email__Password` in environment variables
 
 ### Scheduling
 

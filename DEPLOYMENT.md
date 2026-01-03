@@ -17,7 +17,7 @@ The service will:
 - **RAM**: Minimum 512MB, recommended 1GB
 - **Disk**: 2GB minimum
 - **Network**: Internet access (for API calls and SMTP)
-- **Firewall**: Allow outbound SMTP (port 587/465/25)
+- **Firewall**: Allow outbound SMTP (port 465 recommended for attachments)
 
 ### Required Information
 - Zaptec API credentials (username/password)
@@ -115,10 +115,10 @@ Update the configuration:
     "InstallationId": "your-installation-id-here"
   },
   "Email": {
-    "SmtpServer": "smtp.gmail.com",
-    "SmtpPort": 587,
+    "SmtpServer": "posteo.de",
+    "SmtpPort": 465,
     "UseSsl": true,
-    "FromEmail": "noreply@yourdomain.com",
+    "FromEmail": "your-email@posteo.de",
     "FromName": "Zaptec Report Service",
     "ToEmails": [
       "recipient1@example.com",
@@ -144,14 +144,15 @@ Uncomment and update these lines:
 ```ini
 Environment="Zaptec__Username=your_email@example.com"
 Environment="Zaptec__Password=your_zaptec_password"
-Environment="Email__Username=smtp_username"
-Environment="Email__Password=smtp_app_password"
+Environment="Email__Username=your-email@posteo.de"
+Environment="Email__Password=your_posteo_app_password"
 ```
 
-**Note for Gmail users:**
-- Enable 2-factor authentication
-- Generate an "App Password" at https://myaccount.google.com/apppasswords
-- Use the app password as `Email__Password`
+**Note for Posteo users:**
+- Create an App Password for SMTP access
+- Visit https://posteo.de/en/help/app-passwords for instructions
+- Use your Posteo email address as `Email__Username`
+- Use the generated app password as `Email__Password`
 
 #### 5.3 Add the Template File
 
@@ -275,15 +276,15 @@ systemctl status zaptec-report.timer
 
 **Check SMTP credentials:**
 ```bash
-# Test SMTP connection manually
-telnet smtp.gmail.com 587
+# Test SMTP connection manually (port 465 for SSL)
+openssl s_client -connect posteo.de:465 -crlf
 ```
 
 **Common issues:**
 - Wrong SMTP server or port
-- App password not configured (Gmail)
+- App password not configured (Posteo)
 - Firewall blocking outbound SMTP
-- Two-factor authentication not enabled (Gmail)
+- Make sure you're using an app password from https://posteo.de/en/help/app-passwords
 
 **Check logs:**
 ```bash

@@ -213,10 +213,10 @@ try
             Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
         }
 
-        // In service mode, always export and send email
+        // In service mode, always export both Excel and PDF and send email
         // In interactive mode, ask user
         var shouldExport = isServiceMode;
-        var exportFormat = "excel"; // Default for service mode
+        var exportFormat = "both"; // Default for service mode: generate both Excel and PDF
 
         if (!isServiceMode)
         {
@@ -308,46 +308,67 @@ try
                 }
             }
 
-            // Send email in service mode (attach Excel by default, or PDF if Excel not available)
-            if (isServiceMode)
+            // Send email in service mode (attach both Excel and PDF if available)
+            if (isServiceMode && (excelPath != null || pdfPath != null))
             {
-                var attachmentPath = excelPath ?? pdfPath;
-                var attachmentFileName = Path.GetFileName(attachmentPath!);
-
-                if (attachmentPath != null)
+                // Prepare attachments list
+                var attachments = new List<(string filePath, string fileName)>();
+                if (excelPath != null)
                 {
-                    // Get email configuration
-                    var smtpServer = configuration["Email:SmtpServer"] ?? throw new Exception("Email:SmtpServer not configured");
-                    var smtpPort = int.Parse(configuration["Email:SmtpPort"] ?? "465");
-                    var useSsl = bool.Parse(configuration["Email:UseSsl"] ?? "true");
-                    var emailUsername = configuration["Email:Username"] ?? configuration["Zaptec:Username"] ?? throw new Exception("Email:Username not configured");
-                    var emailPassword = configuration["Email:Password"] ?? configuration["Zaptec:Password"] ?? throw new Exception("Email:Password not configured");
-                    var fromEmail = configuration["Email:FromEmail"] ?? throw new Exception("Email:FromEmail not configured");
-                    var fromName = configuration["Email:FromName"] ?? "Zaptec Report Service";
-                    var toEmails = configuration.GetSection("Email:ToEmails").Get<string[]>() ?? throw new Exception("Email:ToEmails not configured");
-                    var ccEmails = configuration.GetSection("Email:CcEmails").Get<string[]>();
-                    var bccEmails = configuration.GetSection("Email:BccEmails").Get<string[]>();
-                    var subjectTemplate = configuration["Email:SubjectTemplate"] ?? "Zaptec Usage Report - {0:MMMM yyyy}";
+                    attachments.Add((excelPath, Path.GetFileName(excelPath)));
+                }
+                if (pdfPath != null)
+                {
+                    attachments.Add((pdfPath, Path.GetFileName(pdfPath)));
+                }
 
-                    var emailService = new EmailService(smtpServer, smtpPort, emailUsername, emailPassword, useSsl, fromEmail, fromName);
-                    var subject = string.Format(subjectTemplate, fromDate);
-                    var emailBody = EmailService.GenerateReportEmailBody(installationName, fromDate, toDate, sessions.Count, totalEnergy, totalDuration);
+                // Get email configuration
+                var smtpServer = configuration["Email:SmtpServer"] ?? throw new Exception("Email:SmtpServer not configured");
+                var smtpPort = int.Parse(configuration["Email:SmtpPort"] ?? "465");
+                var useSsl = bool.Parse(configuration["Email:UseSsl"] ?? "true");
+                var emailUsername = configuration["Email:Username"] ?? configuration["Zaptec:Username"] ?? throw new Exception("Email:Username not configured");
+                var emailPassword = configuration["Email:Password"] ?? configuration["Zaptec:Password"] ?? throw new Exception("Email:Password not configured");
+                var fromEmail = configuration["Email:FromEmail"] ?? throw new Exception("Email:FromEmail not configured");
+                var fromName = configuration["Email:FromName"] ?? "Zaptec Report Service";
+                var toEmails = configuration.GetSection("Email:ToEmails").Get<string[]>() ?? throw new Exception("Email:ToEmails not configured");
+                var ccEmails = configuration.GetSection("Email:CcEmails").Get<string[]>();
+                var bccEmails = configuration.GetSection("Email:BccEmails").Get<string[]>();
+                var subjectTemplate = configuration["Email:SubjectTemplate"] ?? "Zaptec Usage Report - {0:MMMM yyyy}";
 
-                    Console.WriteLine($"[Service Mode] Sending email to {string.Join(", ", toEmails)}...");
-                    await emailService.SendReportEmailAsync(toEmails, subject, emailBody, attachmentPath, attachmentFileName, ccEmails, bccEmails);
-                    Console.WriteLine($"[Service Mode] Email sent successfully!");
+                var emailService = new EmailService(smtpServer, smtpPort, emailUsername, emailPassword, useSsl, fromEmail, fromName);
+                var subject = string.Format(subjectTemplate, fromDate);
+                var emailBody = EmailService.GenerateReportEmailBody(
+                    installationName,
+                    fromDate,
+                    toDate,
+                    sessions.Count,
+                    totalEnergy,
+                    totalDuration,
+                    hasExcel: excelPath != null,
+                    hasPdf: pdfPath != null
+                );
 
-                    // Clean up temp files
-                    if (excelPath != null && File.Exists(excelPath))
-                    {
-                        File.Delete(excelPath);
-                        Console.WriteLine($"[Service Mode] Temporary Excel file deleted.");
-                    }
-                    if (pdfPath != null && File.Exists(pdfPath))
-                    {
-                        File.Delete(pdfPath);
-                        Console.WriteLine($"[Service Mode] Temporary PDF file deleted.");
-                    }
+                Console.WriteLine($"[Service Mode] Sending email with {attachments.Count} attachment(s) to {string.Join(", ", toEmails)}...");
+                await emailService.SendReportEmailWithAttachmentsAsync(
+                    toEmails,
+                    subject,
+                    emailBody,
+                    attachments.ToArray(),
+                    ccEmails,
+                    bccEmails
+                );
+                Console.WriteLine($"[Service Mode] Email sent successfully!");
+
+                // Clean up temp files
+                if (excelPath != null && File.Exists(excelPath))
+                {
+                    File.Delete(excelPath);
+                    Console.WriteLine($"[Service Mode] Temporary Excel file deleted.");
+                }
+                if (pdfPath != null && File.Exists(pdfPath))
+                {
+                    File.Delete(pdfPath);
+                    Console.WriteLine($"[Service Mode] Temporary PDF file deleted.");
                 }
             }
         }

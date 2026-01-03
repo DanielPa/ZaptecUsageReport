@@ -51,7 +51,18 @@ ssh root@<container-ip>
 
 Transfer the project files to the container. You have several options:
 
-**Option A: Using git (recommended)**
+**Option A: Pre-build locally (Recommended - Faster)**
+```bash
+# On your local machine, build the application first
+cd /path/to/ZaptecUsageReport
+./build-for-deployment.sh
+
+# This creates a 'publish' folder with compiled binaries
+# Now transfer the entire project to the container
+scp -r . root@<container-ip>:/tmp/ZaptecUsageReport
+```
+
+**Option B: Using git**
 ```bash
 # Install git in the container
 apt-get update && apt-get install -y git
@@ -62,13 +73,14 @@ git clone <your-repo-url>
 cd ZaptecUsageReport
 ```
 
-**Option B: Using SCP from your local machine**
+**Option C: Using SCP without pre-building**
 ```bash
 # From your local machine
-scp -r /Users/pappd/Documents/Github/DanielPa/ZaptecUsageReport root@<container-ip>:/tmp/
+scp -r /path/to/ZaptecUsageReport root@<container-ip>:/tmp/
+# The deployment script will install SDK and build in the container
 ```
 
-**Option C: Using Proxmox web UI**
+**Option D: Using Proxmox web UI**
 Upload files through the Proxmox web interface
 
 ### 4. Run the Deployment Script

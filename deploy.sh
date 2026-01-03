@@ -51,7 +51,15 @@ if ! command -v dotnet &> /dev/null; then
     apt-get update
     apt-get install -y dotnet-runtime-9.0
 else
-    echo -e "${GREEN}.NET already installed${NC}"
+    echo -e "${GREEN}.NET Runtime already installed${NC}"
+fi
+
+# Check if dotnet SDK is available
+if ! dotnet --list-sdks &> /dev/null || [ -z "$(dotnet --list-sdks)" ]; then
+    echo -e "${YELLOW}Warning: .NET SDK not found. Installing SDK for build...${NC}"
+    apt-get install -y dotnet-sdk-9.0
+else
+    echo -e "${GREEN}.NET SDK already installed${NC}"
 fi
 
 echo -e "\n${GREEN}Step 2: Creating application user and group${NC}"
@@ -69,10 +77,19 @@ chmod 750 $INSTALL_DIR
 
 echo -e "\n${GREEN}Step 4: Building and publishing application${NC}"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR/ZaptecUsageReport"
 
-# Publish the application
-dotnet publish -c Release -r linux-x64 --self-contained false -o "$INSTALL_DIR"
+# Check if pre-built binaries exist
+if [ -d "$SCRIPT_DIR/publish" ]; then
+    echo -e "${GREEN}Found pre-built binaries, copying to $INSTALL_DIR${NC}"
+    cp -r "$SCRIPT_DIR/publish/"* "$INSTALL_DIR/"
+else
+    echo -e "${YELLOW}Pre-built binaries not found, building from source...${NC}"
+    cd "$SCRIPT_DIR/ZaptecUsageReport"
+
+    # Publish the application
+    echo -e "${GREEN}Running: dotnet publish -c Release -r linux-x64 --self-contained false${NC}"
+    dotnet publish -c Release -r linux-x64 --self-contained false -o "$INSTALL_DIR"
+fi
 
 echo -e "\n${GREEN}Step 5: Setting permissions${NC}"
 chown -R $APP_USER:$APP_GROUP $INSTALL_DIR

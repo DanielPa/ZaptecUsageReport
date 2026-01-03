@@ -8,6 +8,10 @@ A .NET console application that generates usage reports from the Zaptec API for 
 - **Two report types:**
   - **Summary Report**: Aggregated statistics per user (total sessions, energy, duration)
   - **Detailed Session Report**: Individual charge session details with timestamps, duration, and energy consumption
+- **Excel Export**: Export detailed reports to Excel using a customizable template
+  - Supports custom formulas and calculations
+  - Automatic recalculation of template formulas
+  - Preserves template styling and formatting
 - Flexible date range selection (current month, last month, or custom month)
 - Automatic pagination for large datasets
 - Secure credential management using user secrets
@@ -45,6 +49,24 @@ Edit the file and replace the `InstallationId` with your actual installation ID:
   }
 }
 ```
+
+3. **(Optional) Create an Excel template** for exporting detailed reports:
+
+Create a file named `template.xlsx` in the `ZaptecUsageReport` directory with these columns:
+
+| Column | Header | Description |
+|--------|--------|-------------|
+| A | Start Date/Time | Session start |
+| B | End Date/Time | Session end |
+| C | Duration (Hours) | Duration in decimal hours |
+| D | Energy (kWh) | Energy consumed |
+| E | User Name | User's full name |
+| F | User Email | User's email |
+| G | Charger Name | Charger name |
+| H | Device Name | Device ID |
+| I | Session ID | Unique session ID |
+
+You can add formulas, formatting, and charts to the template. See [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md) for detailed instructions.
 
 ## Usage
 
@@ -133,14 +155,37 @@ Session: def456...
 Total Sessions: 3
 Total Energy: 65.20 kWh
 Total Duration: 0.11:25:00
+
+Export to Excel? (y/n): y
+
+Excel report saved to: /Users/username/Documents/ZaptecReport_2025-12_20260102_143025.xlsx
 ```
+
+## Excel Export
+
+The detailed session report can be exported to Excel format:
+
+1. Create a `template.xlsx` file with the column structure (see setup step 3)
+2. Run the application and select "Detailed session report"
+3. When prompted, choose to export to Excel
+4. The file will be saved to your Documents folder with a timestamped filename
+
+**Features:**
+- Template formulas are automatically recalculated
+- Custom formatting and styling are preserved
+- Charts and conditional formatting work as expected
+- Output filename format: `ZaptecReport_YYYY-MM_YYYYMMDD_HHMMSS.xlsx`
+
+For detailed template creation instructions, see [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md).
 
 ## Project Structure
 
 - `Program.cs` - Main entry point and report display logic
 - `Services/ZaptecApiClient.cs` - Zaptec API client with authentication and data fetching
+- `Services/ExcelExportService.cs` - Excel export functionality using ClosedXML
 - `Models/` - Data models for API requests and responses
 - `appsettings.json` - Configuration file (non-sensitive settings)
+- `template.xlsx` - (Optional) Excel template for exports
 
 ## Security Notes
 

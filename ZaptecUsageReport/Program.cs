@@ -167,6 +167,29 @@ try
         Console.WriteLine($"\nTotal Sessions: {sessions.Count}");
         Console.WriteLine($"Total Energy: {totalEnergy:F2} kWh");
         Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
+
+        // Ask if user wants to export to Excel
+        Console.Write("\nExport to Excel? (y/n): ");
+        var exportChoice = Console.ReadLine()?.ToLower();
+
+        if (exportChoice == "y" || exportChoice == "yes")
+        {
+            var templatePath = "template.xlsx";
+            if (!File.Exists(templatePath))
+            {
+                Console.WriteLine($"Warning: Template file '{templatePath}' not found. Please create a template.xlsx file.");
+            }
+            else
+            {
+                var outputFileName = $"ZaptecReport_{fromDate:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var outputPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), outputFileName);
+
+                var excelService = new ExcelExportService();
+                excelService.ExportToExcel(sessions, templatePath, outputPath, fromDate, toDate);
+
+                Console.WriteLine($"\nExcel report saved to: {outputPath}");
+            }
+        }
     }
     else
     {

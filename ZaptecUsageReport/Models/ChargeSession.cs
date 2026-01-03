@@ -17,4 +17,5 @@ public class ChargeSession
     public string ChargerName { get; set; } = string.Empty;
     public string InstallationId { get; set; } = string.Empty;
     public string InstallationName { get; set; } = string.Empty;
+    public string TokenName { get; set; } = string.Empty;
 }

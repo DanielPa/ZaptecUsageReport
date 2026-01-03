@@ -213,67 +213,137 @@ try
             Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
         }
 
-        // In service mode, always export to Excel and send email
+        // In service mode, always export and send email
         // In interactive mode, ask user
         var shouldExport = isServiceMode;
+        var exportFormat = "excel"; // Default for service mode
+
         if (!isServiceMode)
         {
-            Console.Write("\nExport to Excel? (y/n): ");
+            Console.WriteLine("\nExport options:");
+            Console.WriteLine("1. Excel (.xlsx)");
+            Console.WriteLine("2. PDF (.pdf)");
+            Console.WriteLine("3. Both (Excel + PDF)");
+            Console.WriteLine("4. Skip export");
+            Console.Write("\nEnter your choice (1-4): ");
             var exportChoice = Console.ReadLine()?.ToLower();
-            shouldExport = exportChoice == "y" || exportChoice == "yes";
+
+            shouldExport = exportChoice == "1" || exportChoice == "2" || exportChoice == "3";
+            exportFormat = exportChoice switch
+            {
+                "1" => "excel",
+                "2" => "pdf",
+                "3" => "both",
+                _ => "none"
+            };
         }
 
         if (shouldExport)
         {
-            var templatePath = "template.xlsx";
-            if (!File.Exists(templatePath))
+            var installationName = sessions.FirstOrDefault()?.InstallationName ?? "Unknown Installation";
+            var baseFileName = $"ZaptecReport_{fromDate:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}";
+            var outputDir = isServiceMode
+                ? "/tmp"
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+            string? excelPath = null;
+            string? pdfPath = null;
+
+            // Generate Excel if requested
+            if (exportFormat == "excel" || exportFormat == "both")
             {
-                Console.WriteLine($"Error: Template file '{templatePath}' not found. Please create a template.xlsx file.");
-                Environment.Exit(1);
+                var templatePath = "template.xlsx";
+                if (!File.Exists(templatePath))
+                {
+                    Console.WriteLine($"Error: Template file '{templatePath}' not found. Please create a template.xlsx file.");
+                    if (exportFormat == "excel")
+                    {
+                        Environment.Exit(1);
+                    }
+                    Console.WriteLine("Skipping Excel export...");
+                }
+                else
+                {
+                    var excelFileName = $"{baseFileName}.xlsx";
+                    excelPath = Path.Combine(outputDir, excelFileName);
+
+                    var excelService = new ExcelExportService();
+                    excelService.ExportToExcel(sessions, templatePath, excelPath, fromDate, toDate, installationName);
+
+                    if (isServiceMode)
+                    {
+                        Console.WriteLine($"[Service Mode] Excel report created: {excelPath}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"\nExcel report saved to: {excelPath}");
+                    }
+                }
             }
 
-            var outputFileName = $"ZaptecReport_{fromDate:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
-            var outputPath = isServiceMode
-                ? Path.Combine("/tmp", outputFileName)
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), outputFileName);
+            // Generate PDF if requested
+            if (exportFormat == "pdf" || exportFormat == "both")
+            {
+                var pdfFileName = $"{baseFileName}.pdf";
+                pdfPath = Path.Combine(outputDir, pdfFileName);
 
-            var installationName = sessions.FirstOrDefault()?.InstallationName ?? "Unknown Installation";
-            var excelService = new ExcelExportService();
-            excelService.ExportToExcel(sessions, templatePath, outputPath, fromDate, toDate, installationName);
+                // Get cost per kWh from configuration
+                var costPerKwh = double.Parse(configuration["Pricing:CostPerKwh"] ?? "0.25");
 
-            Console.WriteLine($"[Service Mode] Excel report created: {outputPath}");
+                var pdfService = new PdfExportService(costPerKwh);
+                pdfService.GeneratePdfReport(sessions, installationName, fromDate, toDate, pdfPath);
 
-            // Send email in service mode
+                if (isServiceMode)
+                {
+                    Console.WriteLine($"[Service Mode] PDF report created: {pdfPath}");
+                }
+                else
+                {
+                    Console.WriteLine($"PDF report saved to: {pdfPath}");
+                }
+            }
+
+            // Send email in service mode (attach Excel by default, or PDF if Excel not available)
             if (isServiceMode)
             {
-                // Get email configuration
-                var smtpServer = configuration["Email:SmtpServer"] ?? throw new Exception("Email:SmtpServer not configured");
-                var smtpPort = int.Parse(configuration["Email:SmtpPort"] ?? "587");
-                var useSsl = bool.Parse(configuration["Email:UseSsl"] ?? "true");
-                var emailUsername = configuration["Email:Username"] ?? configuration["Zaptec:Username"] ?? throw new Exception("Email:Username not configured");
-                var emailPassword = configuration["Email:Password"] ?? configuration["Zaptec:Password"] ?? throw new Exception("Email:Password not configured");
-                var fromEmail = configuration["Email:FromEmail"] ?? throw new Exception("Email:FromEmail not configured");
-                var fromName = configuration["Email:FromName"] ?? "Zaptec Report Service";
-                var toEmails = configuration.GetSection("Email:ToEmails").Get<string[]>() ?? throw new Exception("Email:ToEmails not configured");
-                var ccEmails = configuration.GetSection("Email:CcEmails").Get<string[]>();
-                var bccEmails = configuration.GetSection("Email:BccEmails").Get<string[]>();
-                var subjectTemplate = configuration["Email:SubjectTemplate"] ?? "Zaptec Usage Report - {0:MMMM yyyy}";
+                var attachmentPath = excelPath ?? pdfPath;
+                var attachmentFileName = Path.GetFileName(attachmentPath!);
 
-                var emailService = new EmailService(smtpServer, smtpPort, emailUsername, emailPassword, useSsl, fromEmail, fromName);
-                var subject = string.Format(subjectTemplate, fromDate);
-                var emailBody = EmailService.GenerateReportEmailBody(installationName, fromDate, toDate, sessions.Count, totalEnergy, totalDuration);
+                if (attachmentPath != null)
+                {
+                    // Get email configuration
+                    var smtpServer = configuration["Email:SmtpServer"] ?? throw new Exception("Email:SmtpServer not configured");
+                    var smtpPort = int.Parse(configuration["Email:SmtpPort"] ?? "465");
+                    var useSsl = bool.Parse(configuration["Email:UseSsl"] ?? "true");
+                    var emailUsername = configuration["Email:Username"] ?? configuration["Zaptec:Username"] ?? throw new Exception("Email:Username not configured");
+                    var emailPassword = configuration["Email:Password"] ?? configuration["Zaptec:Password"] ?? throw new Exception("Email:Password not configured");
+                    var fromEmail = configuration["Email:FromEmail"] ?? throw new Exception("Email:FromEmail not configured");
+                    var fromName = configuration["Email:FromName"] ?? "Zaptec Report Service";
+                    var toEmails = configuration.GetSection("Email:ToEmails").Get<string[]>() ?? throw new Exception("Email:ToEmails not configured");
+                    var ccEmails = configuration.GetSection("Email:CcEmails").Get<string[]>();
+                    var bccEmails = configuration.GetSection("Email:BccEmails").Get<string[]>();
+                    var subjectTemplate = configuration["Email:SubjectTemplate"] ?? "Zaptec Usage Report - {0:MMMM yyyy}";
 
-                Console.WriteLine($"[Service Mode] Sending email to {string.Join(", ", toEmails)}...");
-                await emailService.SendReportEmailAsync(toEmails, subject, emailBody, outputPath, outputFileName, ccEmails, bccEmails);
-                Console.WriteLine($"[Service Mode] Email sent successfully!");
+                    var emailService = new EmailService(smtpServer, smtpPort, emailUsername, emailPassword, useSsl, fromEmail, fromName);
+                    var subject = string.Format(subjectTemplate, fromDate);
+                    var emailBody = EmailService.GenerateReportEmailBody(installationName, fromDate, toDate, sessions.Count, totalEnergy, totalDuration);
 
-                // Clean up temp file
-                File.Delete(outputPath);
-                Console.WriteLine($"[Service Mode] Temporary file deleted.");
-            }
-            else
-            {
-                Console.WriteLine($"\nExcel report saved to: {outputPath}");
+                    Console.WriteLine($"[Service Mode] Sending email to {string.Join(", ", toEmails)}...");
+                    await emailService.SendReportEmailAsync(toEmails, subject, emailBody, attachmentPath, attachmentFileName, ccEmails, bccEmails);
+                    Console.WriteLine($"[Service Mode] Email sent successfully!");
+
+                    // Clean up temp files
+                    if (excelPath != null && File.Exists(excelPath))
+                    {
+                        File.Delete(excelPath);
+                        Console.WriteLine($"[Service Mode] Temporary Excel file deleted.");
+                    }
+                    if (pdfPath != null && File.Exists(pdfPath))
+                    {
+                        File.Delete(pdfPath);
+                        Console.WriteLine($"[Service Mode] Temporary PDF file deleted.");
+                    }
+                }
             }
         }
     }

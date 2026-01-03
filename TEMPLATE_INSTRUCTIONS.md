@@ -10,31 +10,29 @@ The template file should have the following columns in row 1 (headers):
 
 | Column | Header | Data Type | Description |
 |--------|--------|-----------|-------------|
-| A | Start Date/Time | DateTime | When the charging session started |
-| B | End Date/Time | DateTime | When the charging session ended |
-| C | Duration (Hours) | Number | Duration in decimal hours |
-| D | Energy (kWh) | Number | Total energy consumed |
-| E | User Name | Text | Full name of the user |
-| F | User Email | Text | Email address of the user |
-| G | Charger Name | Text | Name of the charger |
-| H | Device Name | Text | Device identifier |
-| I | Session ID | Text | Unique session identifier |
+| A | Session ID | Text | Unique session identifier |
+| B | Device ID | Text | Charger device identifier |
+| C | Start Date/Time | DateTime | When the charging session started |
+| D | End Date/Time | DateTime | When the charging session ended |
+| E | Duration | Time | Duration in HH:MM format |
+| F | Energy (kWh) | Number | Total energy consumed in kWh |
+| G | Signed Session | Text | Cryptographic signature of the session |
 
 ### Example Template Setup
 
 1. Create a new Excel file named `template.xlsx`
 2. In row 1, add the headers listed above
 3. **Convert to Excel Table (Recommended)**:
-   - Select the header row and at least one data row (e.g., A1:I2)
+   - Select the header row and at least one data row (e.g., A1:G2)
    - Go to **Insert** → **Table** (or press Ctrl+T / Cmd+T)
    - Make sure "My table has headers" is checked
    - Click OK
    - The table will automatically expand when new rows are added!
 4. Format the columns appropriately:
-   - Columns A & B: Date/Time format (e.g., `yyyy-MM-dd HH:mm:ss`)
-   - Column C: Number format with 2 decimal places
-   - Column D: Number format with 2 decimal places
-   - Columns E-I: Text format
+   - Columns A, B, G: Text format
+   - Columns C & D: Date/Time format (e.g., `yyyy-MM-dd HH:mm:ss`)
+   - Column E: Time format (e.g., `HH:MM`)
+   - Column F: Number format with 2 decimal places
 
 ### Adding Formulas
 
@@ -46,23 +44,23 @@ You can add any Excel formulas to your template. The application will automatica
 - **Total Energy (in a cell below the table)**:
   `=SUM(Table1[Energy (kWh)])` - Uses structured references, automatically adjusts!
 
-- **Average Session Duration**:
-  `=AVERAGE(Table1[Duration (Hours)])`
+- **Session Count**:
+  `=COUNTA(Table1[Session ID])`
 
-- **Cost Calculation** (add a new column to the table):
-  `=[@[Energy (kWh)]]*0.25` - This formula in column J will auto-fill for all rows
+- **Cost Calculation** (add a new column H to the table):
+  `=[@[Energy (kWh)]]*0.25` - This formula will auto-fill for all rows
 
 - **Total Row**: You can enable the Table Total Row (Design tab) and it will automatically calculate sums/averages
 
 **Without Table:**
 - **Total Energy**:
-  `=SUM(D2:D1000)` (adjust range as needed)
+  `=SUM(F2:F1000)` (adjust range as needed)
 
-- **Average Session Duration**:
-  `=AVERAGE(C2:C1000)`
+- **Session Count**:
+  `=COUNTA(A2:A1000)`
 
-- **Cost Calculation** (in column J):
-  `=D2*0.25` (then copy down)
+- **Cost Calculation** (in column H):
+  `=F2*0.25` (then copy down)
 
 **Conditional Formatting**:
   Highlight rows where energy consumption > 50 kWh (works with both approaches)

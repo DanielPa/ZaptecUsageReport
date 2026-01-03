@@ -8,11 +8,10 @@ A .NET console application that generates usage reports from the Zaptec API for 
 - **Two report types:**
   - **Summary Report**: Aggregated statistics per user (total sessions, energy, duration)
   - **Detailed Session Report**: Individual charge session details with timestamps, duration, and energy consumption
-- **Excel Export**: Export detailed reports to Excel using a customizable template
-  - Supports custom formulas and calculations
-  - Automatic recalculation of template formulas
-  - Preserves template styling and formatting
-  - Dynamic header data (export date, date range, installation name, totals)
+- **Multiple Export Formats**: Export detailed reports to Excel or PDF
+  - **Excel Export**: Using customizable templates with formulas and formatting
+  - **PDF Export**: Professional landscape reports with tables and headers
+  - Support for exporting both formats simultaneously
 - **Automated Service Mode**: Run as a scheduled service
   - Automatic monthly report generation
   - Email delivery with Excel attachment
@@ -43,18 +42,23 @@ dotnet user-secrets set "Zaptec:Username" "your_email@example.com"
 dotnet user-secrets set "Zaptec:Password" "your_password"
 ```
 
-2. **Update the Installation ID** in `appsettings.json`:
+2. **Update the Installation ID and Pricing** in `appsettings.json`:
 
-Edit the file and replace the `InstallationId` with your actual installation ID:
+Edit the file and replace the `InstallationId` with your actual installation ID and optionally adjust the cost per kWh:
 
 ```json
 {
   "Zaptec": {
     "ApiBaseUrl": "https://api.zaptec.com",
     "InstallationId": "your-installation-id-here"
+  },
+  "Pricing": {
+    "CostPerKwh": 0.25
   }
 }
 ```
+
+The `CostPerKwh` value is used to calculate costs in PDF reports (default: €0.25 per kWh).
 
 3. **(Optional) Create an Excel template** for exporting detailed reports:
 
@@ -62,15 +66,13 @@ Create a file named `template.xlsx` in the `ZaptecUsageReport` directory with th
 
 | Column | Header | Description |
 |--------|--------|-------------|
-| A | Start Date/Time | Session start |
-| B | End Date/Time | Session end |
-| C | Duration (Hours) | Duration in decimal hours |
-| D | Energy (kWh) | Energy consumed |
-| E | User Name | User's full name |
-| F | User Email | User's email |
-| G | Charger Name | Charger name |
-| H | Device Name | Device ID |
-| I | Session ID | Unique session ID |
+| A | Session ID | Unique session identifier |
+| B | Device ID | Charger device identifier |
+| C | Start Date/Time | Session start timestamp |
+| D | End Date/Time | Session end timestamp |
+| E | Duration | Duration in HH:MM format |
+| F | Energy (kWh) | Energy consumed in kWh |
+| G | Signed Session | Cryptographic signature |
 
 You can add formulas, formatting, and charts to the template. See [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md) for detailed instructions.
 
@@ -162,12 +164,21 @@ Total Sessions: 3
 Total Energy: 65.20 kWh
 Total Duration: 0.11:25:00
 
-Export to Excel? (y/n): y
+Export options:
+1. Excel (.xlsx)
+2. PDF (.pdf)
+3. Both (Excel + PDF)
+4. Skip export
+
+Enter your choice (1-4): 3
 
 Excel report saved to: /Users/username/Documents/ZaptecReport_2025-12_20260102_143025.xlsx
+PDF report saved to: /Users/username/Documents/ZaptecReport_2025-12_20260102_143025.pdf
 ```
 
-## Excel Export
+## Report Export
+
+### Excel Export
 
 The detailed session report can be exported to Excel format:
 
@@ -183,6 +194,30 @@ The detailed session report can be exported to Excel format:
 - Output filename format: `ZaptecReport_YYYY-MM_YYYYMMDD_HHMMSS.xlsx`
 
 For detailed template creation instructions, see [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md).
+
+### PDF Export
+
+The detailed session report can also be exported to PDF format:
+
+1. Run the application and select "Detailed session report"
+2. When prompted, choose to export to PDF (or both formats)
+3. The file will be saved to your Documents folder with a timestamped filename
+
+**Features:**
+- Professional landscape layout optimized for A4 paper
+- Colored header with installation name and report period
+- Summary statistics (total sessions, energy, **total cost**, duration)
+- **Calculated cost column** based on configurable price per kWh (€0.25 default)
+- Formatted table with all charge sessions
+- Alternating row colors for better readability
+- Automatic pagination with page numbers
+- No template required - works out of the box
+- Output filename format: `ZaptecReport_YYYY-MM_YYYYMMDD_HHMMSS.pdf`
+
+**Cost Calculation:**
+The PDF report includes a "Cost (EUR)" column that automatically calculates the cost for each charging session based on the `Pricing:CostPerKwh` value in `appsettings.json`. The total cost is also displayed in the header summary.
+
+**Note:** PDF export uses QuestPDF under the Community License, which is free for commercial use.
 
 ## Automated Service Mode
 
@@ -267,6 +302,7 @@ OnCalendar=Mon *-*-* 09:00:00
 - `Program.cs` - Main entry point and report display logic
 - `Services/ZaptecApiClient.cs` - Zaptec API client with authentication and data fetching
 - `Services/ExcelExportService.cs` - Excel export functionality using ClosedXML
+- `Services/PdfExportService.cs` - PDF export functionality using QuestPDF
 - `Services/EmailService.cs` - Email service with SMTP support
 - `Models/` - Data models for API requests and responses
 - `appsettings.json` - Configuration file (non-sensitive settings)

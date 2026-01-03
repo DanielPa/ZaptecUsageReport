@@ -1,0 +1,38 @@
+[Unit]
+Description=Zaptec Usage Report Generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zaptec
+Group=zaptec
+WorkingDirectory=/opt/zaptec-report
+ExecStart=/opt/zaptec-report/ZaptecUsageReport --service
+
+# Environment variables for credentials (alternative to user secrets)
+# Uncomment and set these if not using user secrets
+#Environment="Zaptec__Username=your_email@example.com"
+#Environment="Zaptec__Password=your_password"
+#Environment="Email__Username=smtp_username"
+#Environment="Email__Password=smtp_password"
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+ReadOnlyPaths=/opt/zaptec-report
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zaptec-report
+
+# Restart policy
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

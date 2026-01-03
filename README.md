@@ -12,9 +12,15 @@ A .NET console application that generates usage reports from the Zaptec API for 
   - Supports custom formulas and calculations
   - Automatic recalculation of template formulas
   - Preserves template styling and formatting
+  - Dynamic header data (export date, date range, installation name, totals)
+- **Automated Service Mode**: Run as a scheduled service
+  - Automatic monthly report generation
+  - Email delivery with Excel attachment
+  - Systemd timer integration for reliable scheduling
+  - Perfect for LXC containers on Proxmox
 - Flexible date range selection (current month, last month, or custom month)
 - Automatic pagination for large datasets
-- Secure credential management using user secrets
+- Secure credential management using user secrets or environment variables
 
 ## Prerequisites
 
@@ -178,19 +184,101 @@ The detailed session report can be exported to Excel format:
 
 For detailed template creation instructions, see [TEMPLATE_INSTRUCTIONS.md](TEMPLATE_INSTRUCTIONS.md).
 
+## Automated Service Mode
+
+The application can run as an automated service that generates monthly reports and sends them via email.
+
+### Running in Service Mode
+
+```bash
+# Interactive mode (default)
+dotnet run
+
+# Service mode (automated, non-interactive)
+dotnet run -- --service
+```
+
+In service mode, the application will:
+1. Generate a report for the previous complete month
+2. Create an Excel file using the template
+3. Send the Excel file via email to configured recipients
+4. Exit automatically when done
+
+### Deployment to LXC Container
+
+For production use, deploy the application as a systemd service on an LXC container:
+
+```bash
+# Run the deployment script
+./deploy.sh
+```
+
+This will:
+- Install .NET 9.0 Runtime
+- Create a dedicated user account
+- Deploy the application to `/opt/zaptec-report`
+- Install systemd service and timer
+- Configure automatic monthly execution
+
+**For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).**
+
+### Email Configuration
+
+Add email settings to `appsettings.json`:
+
+```json
+{
+  "Email": {
+    "SmtpServer": "smtp.gmail.com",
+    "SmtpPort": 587,
+    "UseSsl": true,
+    "FromEmail": "noreply@yourdomain.com",
+    "FromName": "Zaptec Report Service",
+    "ToEmails": ["recipient@example.com"],
+    "CcEmails": [],
+    "BccEmails": [],
+    "SubjectTemplate": "Zaptec Usage Report - {0:MMMM yyyy}"
+  }
+}
+```
+
+For Gmail, use an [App Password](https://myaccount.google.com/apppasswords) instead of your regular password.
+
+### Scheduling
+
+The service runs automatically on the 1st of each month at 8:00 AM using systemd timers.
+
+To customize the schedule, edit `/etc/systemd/system/zaptec-report.timer`:
+
+```ini
+# Run on 2nd of month at 10:00 AM
+OnCalendar=*-*-02 10:00:00
+
+# Run weekly on Monday
+OnCalendar=Mon *-*-* 09:00:00
+```
+
 ## Project Structure
 
 - `Program.cs` - Main entry point and report display logic
 - `Services/ZaptecApiClient.cs` - Zaptec API client with authentication and data fetching
 - `Services/ExcelExportService.cs` - Excel export functionality using ClosedXML
+- `Services/EmailService.cs` - Email service with SMTP support
 - `Models/` - Data models for API requests and responses
 - `appsettings.json` - Configuration file (non-sensitive settings)
 - `template.xlsx` - (Optional) Excel template for exports
+- `systemd/` - Systemd service and timer files
+- `deploy.sh` - Automated deployment script for LXC containers
+- `DEPLOYMENT.md` - Detailed deployment guide
 
 ## Security Notes
 
-- Credentials are stored using .NET user secrets, not in source code
+- Credentials can be stored using:
+  - .NET user secrets (development)
+  - Environment variables (production/systemd)
+  - Configuration files (not recommended for passwords)
 - Never commit credentials to version control
+- Use app passwords for email providers that support them
 - The `.gitignore` file already excludes user secrets and sensitive files
 
 ## API Documentation
@@ -198,3 +286,18 @@ For detailed template creation instructions, see [TEMPLATE_INSTRUCTIONS.md](TEMP
 - [Zaptec API Authentication](https://docs.zaptec.com/docs/api-authentication)
 - [API Usage Guidelines](https://docs.zaptec.com/docs/api-usage-guidelines)
 - [API Fair Use Policy](https://docs.zaptec.com/docs/api-fair-use-policy)
+
+## Deployment Options
+
+### Option 1: Interactive Desktop Use
+Run the application manually on your desktop to generate ad-hoc reports.
+
+### Option 2: Automated LXC Container (Recommended)
+Deploy to an LXC container on Proxmox for automated monthly reports with email delivery.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete instructions.
+
+### Option 3: Docker Container
+Build your own Docker container using the provided application structure.
+
+### Option 4: Windows Task Scheduler
+Schedule the application on Windows using Task Scheduler with the `--service` flag.

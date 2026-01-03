@@ -1,11 +1,15 @@
 ﻿using Microsoft.Extensions.Configuration;
 using ZaptecUsageReport.Services;
 
+// Check if running in service mode
+var isServiceMode = args.Length > 0 && args[0] == "--service";
+
 // Load configuration
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddUserSecrets<Program>()
+    .AddEnvironmentVariables()
     .Build();
 
 // Get configuration values
@@ -16,76 +20,104 @@ var password = configuration["Zaptec:Password"] ?? throw new Exception("Password
 
 try
 {
-    Console.WriteLine("Zaptec Usage Report Generator");
-    Console.WriteLine("==============================\n");
+    if (!isServiceMode)
+    {
+        Console.WriteLine("Zaptec Usage Report Generator");
+        Console.WriteLine("==============================\n");
+    }
 
     // Initialize API client
     var apiClient = new ZaptecApiClient(apiBaseUrl);
 
     // Authenticate
-    Console.WriteLine("Authenticating...");
-    await apiClient.AuthenticateAsync(username, password);
-    Console.WriteLine("Authentication successful!\n");
-
-    // Get month selection from user
-    DateTime fromDate, toDate;
-
-    Console.WriteLine("Select the month for the report:");
-    Console.WriteLine("1. Current month (so far)");
-    Console.WriteLine("2. Last month (complete)");
-    Console.WriteLine("3. Specific month (enter year and month)");
-    Console.Write("\nEnter your choice (1-3): ");
-
-    var choice = Console.ReadLine();
-
-    switch (choice)
+    if (!isServiceMode)
     {
-        case "1":
-            // Current month from first day to today
-            var now = DateTime.Now;
-            fromDate = new DateTime(now.Year, now.Month, 1);
-            toDate = now;
-            break;
-
-        case "2":
-            // Last complete month
-            var lastMonth = DateTime.Now.AddMonths(-1);
-            fromDate = new DateTime(lastMonth.Year, lastMonth.Month, 1);
-            toDate = fromDate.AddMonths(1).AddDays(-1);
-            break;
-
-        case "3":
-            // Specific month
-            Console.Write("Enter year (e.g., 2025): ");
-            if (!int.TryParse(Console.ReadLine(), out var year))
-            {
-                Console.WriteLine("Invalid year. Exiting.");
-                return;
-            }
-
-            Console.Write("Enter month (1-12): ");
-            if (!int.TryParse(Console.ReadLine(), out var month) || month < 1 || month > 12)
-            {
-                Console.WriteLine("Invalid month. Exiting.");
-                return;
-            }
-
-            fromDate = new DateTime(year, month, 1);
-            toDate = fromDate.AddMonths(1).AddDays(-1);
-            break;
-
-        default:
-            Console.WriteLine("Invalid choice. Exiting.");
-            return;
+        Console.WriteLine("Authenticating...");
+    }
+    await apiClient.AuthenticateAsync(username, password);
+    if (!isServiceMode)
+    {
+        Console.WriteLine("Authentication successful!\n");
     }
 
-    // Ask user what type of report to generate
-    Console.WriteLine("\nSelect report type:");
-    Console.WriteLine("1. Summary report (aggregated by user)");
-    Console.WriteLine("2. Detailed session report (all individual sessions)");
-    Console.Write("\nEnter your choice (1-2): ");
+    // Get month selection from user or use last month in service mode
+    DateTime fromDate, toDate;
 
-    var reportChoice = Console.ReadLine();
+    if (isServiceMode)
+    {
+        // Service mode: Always generate report for the previous complete month
+        var lastMonth = DateTime.Now.AddMonths(-1);
+        fromDate = new DateTime(lastMonth.Year, lastMonth.Month, 1);
+        toDate = fromDate.AddMonths(1).AddDays(-1);
+        Console.WriteLine($"[Service Mode] Generating report for {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}");
+    }
+    else
+    {
+        // Interactive mode
+        Console.WriteLine("Select the month for the report:");
+        Console.WriteLine("1. Current month (so far)");
+        Console.WriteLine("2. Last month (complete)");
+        Console.WriteLine("3. Specific month (enter year and month)");
+        Console.Write("\nEnter your choice (1-3): ");
+
+        var choice = Console.ReadLine();
+
+        switch (choice)
+        {
+            case "1":
+                // Current month from first day to today
+                var now = DateTime.Now;
+                fromDate = new DateTime(now.Year, now.Month, 1);
+                toDate = now;
+                break;
+
+            case "2":
+                // Last complete month
+                var lastMonth = DateTime.Now.AddMonths(-1);
+                fromDate = new DateTime(lastMonth.Year, lastMonth.Month, 1);
+                toDate = fromDate.AddMonths(1).AddDays(-1);
+                break;
+
+            case "3":
+                // Specific month
+                Console.Write("Enter year (e.g., 2025): ");
+                if (!int.TryParse(Console.ReadLine(), out var year))
+                {
+                    Console.WriteLine("Invalid year. Exiting.");
+                    return;
+                }
+
+                Console.Write("Enter month (1-12): ");
+                if (!int.TryParse(Console.ReadLine(), out var month) || month < 1 || month > 12)
+                {
+                    Console.WriteLine("Invalid month. Exiting.");
+                    return;
+                }
+
+                fromDate = new DateTime(year, month, 1);
+                toDate = fromDate.AddMonths(1).AddDays(-1);
+                break;
+
+            default:
+                Console.WriteLine("Invalid choice. Exiting.");
+                return;
+        }
+    }
+
+    // In service mode, always generate detailed report with Excel export
+    // In interactive mode, ask user
+    var reportChoice = isServiceMode ? "2" : null;
+
+    if (!isServiceMode)
+    {
+        // Ask user what type of report to generate
+        Console.WriteLine("\nSelect report type:");
+        Console.WriteLine("1. Summary report (aggregated by user)");
+        Console.WriteLine("2. Detailed session report (all individual sessions)");
+        Console.Write("\nEnter your choice (1-2): ");
+
+        reportChoice = Console.ReadLine();
+    }
 
     if (reportChoice == "1")
     {
@@ -135,58 +167,112 @@ try
     else if (reportChoice == "2")
     {
         // Detailed session report
-        Console.WriteLine($"\nFetching detailed charge sessions from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
+        if (!isServiceMode)
+        {
+            Console.WriteLine($"\nFetching detailed charge sessions from {fromDate:yyyy-MM-dd} to {toDate:yyyy-MM-dd}...");
+        }
         var sessions = await apiClient.GetChargeHistoryAsync(installationId, fromDate, toDate);
 
         if (sessions.Count == 0)
         {
             Console.WriteLine("No charge sessions found in this period.");
+            if (isServiceMode)
+            {
+                Environment.Exit(0);
+            }
             return;
         }
 
-        Console.WriteLine($"\nFound {sessions.Count} charge session(s)");
-        Console.WriteLine("═════════════════════════════════════════════════════════════════\n");
-
-        foreach (var session in sessions.OrderBy(s => s.StartDateTime))
+        if (!isServiceMode)
         {
-            var duration = session.EndDateTime - session.StartDateTime;
-            Console.WriteLine($"Session: {session.Id}");
-            Console.WriteLine($"  User: {session.UserFullName} ({session.UserEmail})");
-            Console.WriteLine($"  Charger: {session.ChargerName} ({session.DeviceName})");
-            Console.WriteLine($"  Start: {session.StartDateTime:yyyy-MM-dd HH:mm:ss}");
-            Console.WriteLine($"  End: {session.EndDateTime:yyyy-MM-dd HH:mm:ss}");
-            Console.WriteLine($"  Duration: {duration.Days}.{duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}");
-            Console.WriteLine($"  Energy: {session.Energy:F2} kWh");
-            Console.WriteLine("─────────────────────────────────────────────────────────────────");
+            Console.WriteLine($"\nFound {sessions.Count} charge session(s)");
+            Console.WriteLine("═════════════════════════════════════════════════════════════════\n");
+
+            foreach (var session in sessions.OrderBy(s => s.StartDateTime))
+            {
+                var duration = session.EndDateTime - session.StartDateTime;
+                Console.WriteLine($"Session: {session.Id}");
+                Console.WriteLine($"  User: {session.UserFullName} ({session.UserEmail})");
+                Console.WriteLine($"  Charger: {session.ChargerName} ({session.DeviceName})");
+                Console.WriteLine($"  Start: {session.StartDateTime:yyyy-MM-dd HH:mm:ss}");
+                Console.WriteLine($"  End: {session.EndDateTime:yyyy-MM-dd HH:mm:ss}");
+                Console.WriteLine($"  Duration: {duration.Days}.{duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}");
+                Console.WriteLine($"  Energy: {session.Energy:F2} kWh");
+                Console.WriteLine("─────────────────────────────────────────────────────────────────");
+            }
         }
 
         // Summary
         var totalEnergy = sessions.Sum(s => s.Energy);
         var totalDuration = sessions.Sum(s => (s.EndDateTime - s.StartDateTime).TotalSeconds);
 
-        Console.WriteLine($"\nTotal Sessions: {sessions.Count}");
-        Console.WriteLine($"Total Energy: {totalEnergy:F2} kWh");
-        Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
+        if (!isServiceMode)
+        {
+            Console.WriteLine($"\nTotal Sessions: {sessions.Count}");
+            Console.WriteLine($"Total Energy: {totalEnergy:F2} kWh");
+            Console.WriteLine($"Total Duration: {TimeSpan.FromSeconds(totalDuration):d\\.hh\\:mm\\:ss}");
+        }
 
-        // Ask if user wants to export to Excel
-        Console.Write("\nExport to Excel? (y/n): ");
-        var exportChoice = Console.ReadLine()?.ToLower();
+        // In service mode, always export to Excel and send email
+        // In interactive mode, ask user
+        var shouldExport = isServiceMode;
+        if (!isServiceMode)
+        {
+            Console.Write("\nExport to Excel? (y/n): ");
+            var exportChoice = Console.ReadLine()?.ToLower();
+            shouldExport = exportChoice == "y" || exportChoice == "yes";
+        }
 
-        if (exportChoice == "y" || exportChoice == "yes")
+        if (shouldExport)
         {
             var templatePath = "template.xlsx";
             if (!File.Exists(templatePath))
             {
-                Console.WriteLine($"Warning: Template file '{templatePath}' not found. Please create a template.xlsx file.");
+                Console.WriteLine($"Error: Template file '{templatePath}' not found. Please create a template.xlsx file.");
+                Environment.Exit(1);
+            }
+
+            var outputFileName = $"ZaptecReport_{fromDate:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            var outputPath = isServiceMode
+                ? Path.Combine("/tmp", outputFileName)
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), outputFileName);
+
+            var installationName = sessions.FirstOrDefault()?.InstallationName ?? "Unknown Installation";
+            var excelService = new ExcelExportService();
+            excelService.ExportToExcel(sessions, templatePath, outputPath, fromDate, toDate, installationName);
+
+            Console.WriteLine($"[Service Mode] Excel report created: {outputPath}");
+
+            // Send email in service mode
+            if (isServiceMode)
+            {
+                // Get email configuration
+                var smtpServer = configuration["Email:SmtpServer"] ?? throw new Exception("Email:SmtpServer not configured");
+                var smtpPort = int.Parse(configuration["Email:SmtpPort"] ?? "587");
+                var useSsl = bool.Parse(configuration["Email:UseSsl"] ?? "true");
+                var emailUsername = configuration["Email:Username"] ?? configuration["Zaptec:Username"] ?? throw new Exception("Email:Username not configured");
+                var emailPassword = configuration["Email:Password"] ?? configuration["Zaptec:Password"] ?? throw new Exception("Email:Password not configured");
+                var fromEmail = configuration["Email:FromEmail"] ?? throw new Exception("Email:FromEmail not configured");
+                var fromName = configuration["Email:FromName"] ?? "Zaptec Report Service";
+                var toEmails = configuration.GetSection("Email:ToEmails").Get<string[]>() ?? throw new Exception("Email:ToEmails not configured");
+                var ccEmails = configuration.GetSection("Email:CcEmails").Get<string[]>();
+                var bccEmails = configuration.GetSection("Email:BccEmails").Get<string[]>();
+                var subjectTemplate = configuration["Email:SubjectTemplate"] ?? "Zaptec Usage Report - {0:MMMM yyyy}";
+
+                var emailService = new EmailService(smtpServer, smtpPort, emailUsername, emailPassword, useSsl, fromEmail, fromName);
+                var subject = string.Format(subjectTemplate, fromDate);
+                var emailBody = EmailService.GenerateReportEmailBody(installationName, fromDate, toDate, sessions.Count, totalEnergy, totalDuration);
+
+                Console.WriteLine($"[Service Mode] Sending email to {string.Join(", ", toEmails)}...");
+                await emailService.SendReportEmailAsync(toEmails, subject, emailBody, outputPath, outputFileName, ccEmails, bccEmails);
+                Console.WriteLine($"[Service Mode] Email sent successfully!");
+
+                // Clean up temp file
+                File.Delete(outputPath);
+                Console.WriteLine($"[Service Mode] Temporary file deleted.");
             }
             else
             {
-                var outputFileName = $"ZaptecReport_{fromDate:yyyy-MM}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
-                var outputPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), outputFileName);
-
-                var excelService = new ExcelExportService();
-                excelService.ExportToExcel(sessions, templatePath, outputPath, fromDate, toDate);
-
                 Console.WriteLine($"\nExcel report saved to: {outputPath}");
             }
         }

@@ -42,14 +42,14 @@ echo -e "${GREEN}Step 1: Installing dependencies${NC}"
 apt-get update
 apt-get install -y wget curl apt-transport-https
 
-# Install .NET 9.0 Runtime
+# Install .NET 10.0 ASP.NET Core Runtime
 if ! command -v dotnet &> /dev/null; then
-    echo -e "${GREEN}Installing .NET 9.0 Runtime...${NC}"
+    echo -e "${GREEN}Installing .NET 10.0 ASP.NET Core Runtime...${NC}"
     wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
     dpkg -i packages-microsoft-prod.deb
     rm packages-microsoft-prod.deb
     apt-get update
-    apt-get install -y dotnet-runtime-9.0
+    apt-get install -y aspnetcore-runtime-10.0
 else
     echo -e "${GREEN}.NET Runtime already installed${NC}"
 fi
@@ -57,7 +57,7 @@ fi
 # Check if dotnet SDK is available
 if ! dotnet --list-sdks &> /dev/null || [ -z "$(dotnet --list-sdks)" ]; then
     echo -e "${YELLOW}Warning: .NET SDK not found. Installing SDK for build...${NC}"
-    apt-get install -y dotnet-sdk-9.0
+    apt-get install -y dotnet-sdk-10.0
 else
     echo -e "${GREEN}.NET SDK already installed${NC}"
 fi

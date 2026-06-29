@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zaptec Usage Report</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f6f8; color: #333; }
+        header { background: #1a5276; color: white; padding: 1rem 1.5rem; }
+        header h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: 0.01em; }
+        main { padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
+        .controls {
+            background: white; border-radius: 8px; padding: 1rem 1.5rem;
+            margin-bottom: 1rem; display: flex; align-items: center; gap: 1.25rem;
+            flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+        }
+        .controls label { font-size: 0.875rem; color: #555; display: flex; align-items: center; gap: 0.4rem; }
+        .controls input[type="date"] {
+            padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px;
+            font-size: 0.875rem; color: #333;
+        }
+        .btn {
+            padding: 0.45rem 1.1rem; border: none; border-radius: 4px;
+            font-size: 0.875rem; cursor: pointer; font-weight: 500; transition: background 0.15s;
+        }
+        .btn-primary { background: #1a5276; color: white; }
+        .btn-primary:hover { background: #154360; }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-success:hover { background: #1e8449; }
+        .btn:disabled { opacity: 0.4; cursor: default; }
+        .spinner {
+            display: none; width: 18px; height: 18px;
+            border: 2px solid #ddd; border-top-color: #1a5276;
+            border-radius: 50%; animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .summary {
+            background: #eaf2ff; border-left: 4px solid #1a5276; border-radius: 4px;
+            padding: 0.7rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; display: none;
+        }
+        .summary span { margin-right: 2rem; font-weight: 600; }
+        .error {
+            background: #fdecea; border-left: 4px solid #c0392b; border-radius: 4px;
+            padding: 0.7rem 1rem; margin-bottom: 1rem; font-size: 0.875rem;
+            display: none; color: #c0392b;
+        }
+        .export-row { display: none; gap: 0.75rem; margin-bottom: 1rem; }
+        .table-wrap { overflow-x: auto; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        table { width: 100%; border-collapse: collapse; background: white; font-size: 0.875rem; }
+        th {
+            background: #1a5276; color: white; padding: 0.65rem 0.85rem;
+            text-align: left; font-weight: 500; white-space: nowrap;
+        }
+        td { padding: 0.55rem 0.85rem; border-bottom: 1px solid #eee; white-space: nowrap; }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: #f9f9f9; }
+        tfoot td {
+            font-weight: 600; background: #eef2f7 !important;
+            border-top: 2px solid #ccc; border-bottom: none;
+        }
+        .empty { text-align: center; color: #999; padding: 3rem; white-space: normal; }
+        .num { text-align: right; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Zaptec Usage Report</h1>
+</header>
+<main>
+    <div class="controls">
+        <label>Von <input type="date" id="from"></label>
+        <label>Bis <input type="date" id="to"></label>
+        <button class="btn btn-primary" onclick="fetchSessions()">Laden</button>
+        <div class="spinner" id="spinner"></div>
+    </div>
+
+    <div class="error" id="error"></div>
+    <div class="summary" id="summary"></div>
+
+    <div class="export-row" id="exportRow">
+        <button class="btn btn-success" onclick="exportFile('excel')">Export Excel</button>
+        <button class="btn btn-success" onclick="exportFile('pdf')">Export PDF</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Start</th>
+                    <th>Ende</th>
+                    <th>Dauer</th>
+                    <th class="num">kWh</th>
+                    <th>Benutzer</th>
+                    <th>Ladestation</th>
+                    <th>Token</th>
+                </tr>
+            </thead>
+            <tbody id="tbody">
+                <tr><td colspan="7" class="empty">Zeitraum auswählen und auf Laden klicken</td></tr>
+            </tbody>
+            <tfoot id="tfoot" style="display:none">
+                <tr>
+                    <td colspan="3">Gesamt</td>
+                    <td class="num" id="footEnergy"></td>
+                    <td colspan="3" id="footCount"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</main>
+<script>
+    let currentSessions = [];
+
+    (function initDates() {
+        const now   = new Date();
+        const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const last  = new Date(now.getFullYear(), now.getMonth(), 0);
+        document.getElementById('from').value = isoDate(first);
+        document.getElementById('to').value   = isoDate(last);
+    })();
+
+    function isoDate(d) {
+        return d.getFullYear() + '-'
+            + String(d.getMonth() + 1).padStart(2, '0') + '-'
+            + String(d.getDate()).padStart(2, '0');
+    }
+
+    function fmtDt(iso) {
+        const d = new Date(iso);
+        return d.toLocaleDateString('de-DE')
+            + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fmtDuration(startIso, endIso) {
+        const ms = new Date(endIso) - new Date(startIso);
+        const h  = Math.floor(ms / 3600000);
+        const m  = Math.floor((ms % 3600000) / 60000);
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('error');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    function clearError() {
+        document.getElementById('error').style.display = 'none';
+    }
+
+    async function fetchSessions() {
+        const from = document.getElementById('from').value;
+        const to   = document.getElementById('to').value;
+        if (!from || !to) { showError('Bitte Von- und Bis-Datum angeben.'); return; }
+
+        clearError();
+        document.getElementById('spinner').style.display = 'block';
+        document.getElementById('summary').style.display = 'none';
+        document.getElementById('exportRow').style.display = 'none';
+        document.getElementById('tfoot').style.display = 'none';
+        document.getElementById('tbody').innerHTML =
+            '<tr><td colspan="7" class="empty">Lade...</td></tr>';
+
+        try {
+            const resp = await fetch(`/api/sessions?from=${from}&to=${to}`);
+            if (!resp.ok) {
+                showError('Fehler beim Laden der Daten: ' + (await resp.text()));
+                return;
+            }
+            currentSessions = await resp.json();
+            renderTable(currentSessions);
+        } catch (e) {
+            showError('Netzwerkfehler: ' + e.message);
+        } finally {
+            document.getElementById('spinner').style.display = 'none';
+        }
+    }
+
+    function renderTable(sessions) {
+        const tbody = document.getElementById('tbody');
+        if (sessions.length === 0) {
+            tbody.innerHTML =
+                '<tr><td colspan="7" class="empty">Keine Ladesitzungen im gewählten Zeitraum</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = sessions
+            .slice()
+            .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime))
+            .map(s => `
+                <tr>
+                    <td>${fmtDt(s.startDateTime)}</td>
+                    <td>${fmtDt(s.endDateTime)}</td>
+                    <td>${fmtDuration(s.startDateTime, s.endDateTime)}</td>
+                    <td class="num">${s.energy.toFixed(2)}</td>
+                    <td>${esc(s.userFullName)}</td>
+                    <td>${esc(s.chargerName)}</td>
+                    <td>${esc(s.tokenName)}</td>
+                </tr>`)
+            .join('');
+
+        const totalEnergy = sessions.reduce((sum, s) => sum + s.energy, 0);
+        document.getElementById('footEnergy').textContent = totalEnergy.toFixed(2);
+        document.getElementById('footCount').textContent  = sessions.length + ' Sitzungen';
+        document.getElementById('tfoot').style.display    = '';
+
+        const summary = document.getElementById('summary');
+        summary.innerHTML =
+            `<span>${sessions.length} Sitzungen</span><span>${totalEnergy.toFixed(2)} kWh gesamt</span>`;
+        summary.style.display   = 'block';
+        document.getElementById('exportRow').style.display = 'flex';
+    }
+
+    function esc(val) {
+        if (!val) return '';
+        return val.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function exportFile(format) {
+        const from = document.getElementById('from').value;
+        const to   = document.getElementById('to').value;
+        clearError();
+        try {
+            const resp = await fetch(`/api/export/${format}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from, to, sessions: currentSessions })
+            });
+            if (!resp.ok) {
+                showError('Export-Fehler: ' + (await resp.text()));
+                return;
+            }
+            const blob = await resp.blob();
+            const ext  = format === 'excel' ? 'xlsx' : 'pdf';
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `ZaptecReport_${from}_${to}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            showError('Netzwerkfehler: ' + e.message);
+        }
+    }
+</script>
+</body>
+</html>

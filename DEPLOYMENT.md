@@ -10,6 +10,8 @@ The service will:
 - Send the report via email to configured recipients
 - Use systemd timers for reliable scheduling
 
+Optionally, a persistent **Web UI** (`--web` mode) can be enabled alongside the timer service to browse, filter, and export sessions on demand via a browser at `http://<container-ip>:5080`.
+
 ## Prerequisites
 
 ### Proxmox LXC Container Requirements
@@ -92,11 +94,13 @@ chmod +x deploy.sh
 ```
 
 The script will:
-- Install .NET 9.0 Runtime
+- Install .NET 10.0 ASP.NET Core Runtime (`aspnetcore-runtime-10.0`)
 - Create application user and directories
 - Build and publish the application
 - Install systemd service and timer
 - Configure permissions
+
+> **Note:** The project now uses `Microsoft.NET.Sdk.Web`, which requires `aspnetcore-runtime-10.0` on the server instead of the base `dotnet-runtime-10.0`. The ASP.NET Core runtime is a superset and includes everything needed.
 
 ### 5. Configure the Application
 
@@ -469,6 +473,52 @@ For issues with:
 - **Application bugs**: Check the GitHub repository
 - **Deployment issues**: Review logs with `journalctl -u zaptec-report.service`
 
+## Web UI
+
+The `--web` mode starts a persistent web server that lets you browse, filter, and export sessions interactively.
+
+### Enable the Web UI Service
+
+```bash
+# Copy the service file
+cp /tmp/ZaptecUsageReport/systemd/zaptec-report-web.service /etc/systemd/system/
+
+# Reload and enable
+systemctl daemon-reload
+systemctl enable --now zaptec-report-web.service
+
+# Check status
+systemctl status zaptec-report-web.service
+```
+
+### Access the UI
+
+Open `http://<container-ip>:5080` in a browser.
+
+### Configuration
+
+The default port is `5080`. To change it, set the environment variable in the service file or edit `appsettings.json`:
+
+```json
+"Web": {
+  "Port": "5080"
+}
+```
+
+Or override per-instance in `/etc/systemd/system/zaptec-report-web.service`:
+
+```ini
+Environment="Web__Port=8080"
+```
+
+### View Web UI Logs
+
+```bash
+journalctl -u zaptec-report-web.service -f
+```
+
+---
+
 ## Summary Checklist
 
 - [ ] LXC container created and running
@@ -482,3 +532,5 @@ For issues with:
 - [ ] Timer running (`systemctl status zaptec-report.timer`)
 - [ ] Next run scheduled (`systemctl list-timers`)
 - [ ] Logs accessible (`journalctl -u zaptec-report.service`)
+- [ ] (Optional) Web UI service enabled (`systemctl enable --now zaptec-report-web.service`)
+- [ ] (Optional) Web UI accessible at `http://<container-ip>:5080`

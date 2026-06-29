@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.Configuration;
+using ZaptecUsageReport;
 using ZaptecUsageReport.Services;
 
 // Check if running in service mode
 var isServiceMode = args.Length > 0 && args[0] == "--service";
+var isWebMode     = args.Length > 0 && args[0] == "--web";
 
 // Load configuration
 var configuration = new ConfigurationBuilder()
@@ -17,6 +19,12 @@ var apiBaseUrl = configuration["Zaptec:ApiBaseUrl"] ?? throw new Exception("ApiB
 var installationId = configuration["Zaptec:InstallationId"] ?? throw new Exception("InstallationId not configured");
 var username = configuration["Zaptec:Username"] ?? throw new Exception("Username not configured. Set with: dotnet user-secrets set \"Zaptec:Username\" \"your_email@example.com\"");
 var password = configuration["Zaptec:Password"] ?? throw new Exception("Password not configured. Set with: dotnet user-secrets set \"Zaptec:Password\" \"your_password\"");
+
+if (isWebMode)
+{
+    await WebServer.RunAsync(args, configuration);
+    return;
+}
 
 try
 {

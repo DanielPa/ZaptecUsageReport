@@ -1,0 +1,39 @@
+[Unit]
+Description=Zaptec Usage Report Web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zaptec
+Group=zaptec
+WorkingDirectory=/opt/zaptec-report
+ExecStart=/opt/zaptec-report/ZaptecUsageReport --web
+
+# Environment variables for credentials (alternative to user secrets)
+# Uncomment and set these if not using user secrets
+#Environment="Zaptec__Username=your_email@example.com"
+#Environment="Zaptec__Password=your_password"
+
+# Optionally override the web port (default: 5080)
+#Environment="Web__Port=5080"
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+ReadOnlyPaths=/opt/zaptec-report
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zaptec-report-web
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

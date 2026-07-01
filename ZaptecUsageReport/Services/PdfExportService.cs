@@ -30,17 +30,18 @@ public class PdfExportService
         DateTime toDate,
         string outputPath)
     {
-        // Configure QuestPDF license (Community license for free use)
         QuestPDF.Settings.License = LicenseType.Community;
 
-        // Calculate totals
         var totalEnergy = sessions.Sum(s => s.Energy);
         var totalCost = totalEnergy * _costPerKwh;
         var totalDuration = TimeSpan.FromHours(sessions.Sum(s => s.DeviceId != null ?
             (s.EndDateTime - s.StartDateTime).TotalHours : 0));
         var totalSessions = sessions.Count;
 
-        // Generate PDF
+        var signedSessions = sessions
+            .Where(s => !string.IsNullOrEmpty(s.SignedSession))
+            .ToList();
+
         Document.Create(container =>
         {
             container.Page(page =>
@@ -51,95 +52,106 @@ public class PdfExportService
                 page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
 
                 page.Header()
-                    .Element(container => ComposeHeader(container, installationName, fromDate, toDate,
+                    .Element(c => ComposeHeader(c, installationName, fromDate, toDate,
                         totalSessions, totalEnergy, totalCost, totalDuration));
 
                 page.Content()
-                    .Element(container => ComposeContent(container, sessions));
+                    .Element(c => ComposeContent(c, sessions));
 
-                page.Footer()
-                    .Element(ComposeFooter);
+                page.Footer().Element(ComposeFooter);
             });
+
+            if (signedSessions.Count > 0)
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(40);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+
+                    page.Content()
+                        .Element(c => ComposeSignatureAppendix(c, signedSessions));
+
+                    page.Footer().Element(ComposeFooter);
+                });
+            }
         })
         .GeneratePdf(outputPath);
 
         return outputPath;
     }
+
+    // Inserts newlines every lineWidth characters so QuestPDF can wrap long strings without spaces
+    private static string ChunkText(string text, int lineWidth)
+    {
+        if (text.Length <= lineWidth) return text;
+        return string.Join("\n",
+            Enumerable.Range(0, (text.Length + lineWidth - 1) / lineWidth)
+                .Select(i => text.Substring(i * lineWidth, Math.Min(lineWidth, text.Length - i * lineWidth))));
+    }
+
     private void ComposeHeader(IContainer container, string installationName, DateTime fromDate,
         DateTime toDate, int totalSessions, double totalEnergy, double totalCost, TimeSpan totalDuration)
     {
         container.Column(column =>
         {
-            // Title
             column.Item().Background(Colors.Blue.Darken2).Padding(10).Row(row =>
             {
                 row.RelativeItem().AlignLeft().Text("Ladebericht")
-                    .FontSize(18)
-                    .Bold()
-                    .FontColor(Colors.White);
-
+                    .FontSize(18).Bold().FontColor(Colors.White);
                 row.RelativeItem().AlignRight().Text($"{DateTime.Now:dd.MM.yyyy HH:mm}")
-                    .FontSize(10)
-                    .FontColor(Colors.White);
+                    .FontSize(10).FontColor(Colors.White);
             });
 
-            // Summary Information Section (German labels like Excel template)
             column.Item().PaddingTop(15).PaddingBottom(10).Table(table =>
             {
-                // Define two columns for labels and values
                 table.ColumnsDefinition(columns =>
                 {
-                    columns.RelativeColumn(2f);   // Label column (left)
-                    columns.RelativeColumn(3f);   // Value column (left)
-                    columns.RelativeColumn(0.5f); // Spacer
-                    columns.RelativeColumn(2.5f); // Label column (right)
-                    columns.RelativeColumn(2f);   // Value column (right)
+                    columns.RelativeColumn(2f);
+                    columns.RelativeColumn(3f);
+                    columns.RelativeColumn(0.5f);
+                    columns.RelativeColumn(2.5f);
+                    columns.RelativeColumn(2f);
                 });
 
-                // Row 1: Mitarbeiter | Exportdatum
                 table.Cell().Text("Mitarbeiter:").FontSize(10).Bold();
                 table.Cell().Text(_employee ?? "").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Exportdatum:").FontSize(10).Bold();
                 table.Cell().Text($"{DateTime.Now:dd.MM.yyyy HH:mm}").FontSize(10);
 
-                // Row 2: Adresse | Abfrage-Zeitraum
                 table.Cell().Text("Adresse:").FontSize(10).Bold();
                 table.Cell().Text(_address ?? "").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Abfrage-Zeitraum:").FontSize(10).Bold();
                 table.Cell().Text($"{fromDate:dd.MM.yyyy} - {toDate:dd.MM.yyyy}").FontSize(10);
 
-                // Row 3: Kennzeichen | Anzahl Sessions
                 table.Cell().Text("Kennzeichen:").FontSize(10).Bold();
                 table.Cell().Text(_vehicleLicensePlate ?? "").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Anzahl Ladesitzungen:").FontSize(10).Bold();
                 table.Cell().Text($"{totalSessions}").FontSize(10);
 
-                // Row 4: Modell | Gesamtladeleistung (kWh)
                 table.Cell().Text("Fahrzeug-Modell:").FontSize(10).Bold();
                 table.Cell().Text(_vehicleModel ?? "").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Gesamtladeleistung (kWh):").FontSize(10).Bold();
                 table.Cell().Text($"{totalEnergy:F2}").FontSize(10);
 
-                // Row 5: Empty | Strompreis pro kWh (brutto)
                 table.Cell().Text("").FontSize(10);
                 table.Cell().Text("").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Strompreis pro kWh (brutto):").FontSize(10).Bold();
                 table.Cell().Text($"{_costPerKwh:F3} €").FontSize(10);
 
-                // Row 6: Empty | Gesamtkosten (brutto)
                 table.Cell().Text("").FontSize(10);
                 table.Cell().Text("").FontSize(10);
-                table.Cell().Text(""); // Spacer
+                table.Cell().Text("");
                 table.Cell().Text("Gesamtkosten (brutto):").FontSize(10).Bold();
                 table.Cell().Text($"{totalCost:F2} €").FontSize(10).Bold().FontColor(Colors.Green.Darken2);
             });
 
-            // Separator line
             column.Item().PaddingTop(10).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
         });
     }
@@ -148,86 +160,84 @@ public class PdfExportService
     {
         container.PaddingTop(10).Table(table =>
         {
-            // Define columns
             table.ColumnsDefinition(columns =>
             {
                 columns.RelativeColumn(2f);   // Session ID
                 columns.RelativeColumn(1.5f); // Device ID
-                columns.RelativeColumn(1.5f); // Start DateTime
-                columns.RelativeColumn(1.5f); // End DateTime
+                columns.RelativeColumn(1.5f); // Start
+                columns.RelativeColumn(1.5f); // End
                 columns.RelativeColumn(0.8f); // Duration
                 columns.RelativeColumn(0.8f); // Energy
                 columns.RelativeColumn(0.8f); // Cost
             });
 
-            // Table Header
             table.Header(header =>
             {
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Sitzungs ID").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Geräte ID").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Start").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Ende").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Dauer").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Energie").Bold();
-                header.Cell().Element(CellStyle).Background(Colors.Grey.Lighten2).Text("Kosten").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Sitzungs ID").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Geräte ID").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Start").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Ende").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Dauer").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Energie").Bold();
+                header.Cell().Element(HeaderCellStyle).Text("Kosten").Bold();
 
-                static IContainer CellStyle(IContainer container)
-                {
-                    return container
-                        .Border(1)
-                        .BorderColor(Colors.Grey.Lighten1)
-                        .Padding(5);
-                }
+                static IContainer HeaderCellStyle(IContainer c) =>
+                    c.Border(1).BorderColor(Colors.Grey.Lighten1).Background(Colors.Grey.Lighten2).Padding(5);
             });
 
-            // Table Content
-            int rowIndex = 0;
+            var rowIndex = 0;
             foreach (var session in sessions)
             {
-                var bgColor = rowIndex % 2 == 0 ? Colors.White : Colors.Grey.Lighten3;
+                var bg = rowIndex % 2 == 0 ? Colors.White : Colors.Grey.Lighten3;
                 var duration = session.EndDateTime - session.StartDateTime;
-
-                // Session ID
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text(session.Id);
-
-                // Device ID
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text(session.DeviceId);
-
-                // Start DateTime
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text(session.StartDateTime.ToString("yyyy-MM-dd HH:mm"));
-
-                // End DateTime
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text(session.EndDateTime.ToString("yyyy-MM-dd HH:mm"));
-
-                // Duration (HH:MM format)
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .Text($"{(int)duration.TotalHours:D2}:{duration.Minutes:D2} h");
-
-                // Energy
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .AlignRight()
-                    .Text($"{session.Energy:F2} kWh");
-
-                // Cost (calculated from energy * cost per kWh)
                 var sessionCost = session.Energy * _costPerKwh;
-                table.Cell().Element(c => CellStyle(c, bgColor))
-                    .AlignRight()
-                    .Text($"{sessionCost:F2} €");
+
+                table.Cell().Element(c => Cell(c, bg)).Text(session.Id);
+                table.Cell().Element(c => Cell(c, bg)).Text(session.DeviceId);
+                table.Cell().Element(c => Cell(c, bg)).Text(session.StartDateTime.ToString("yyyy-MM-dd HH:mm"));
+                table.Cell().Element(c => Cell(c, bg)).Text(session.EndDateTime.ToString("yyyy-MM-dd HH:mm"));
+                table.Cell().Element(c => Cell(c, bg)).Text($"{(int)duration.TotalHours:D2}:{duration.Minutes:D2} h");
+                table.Cell().Element(c => Cell(c, bg)).AlignRight().Text($"{session.Energy:F2} kWh");
+                table.Cell().Element(c => Cell(c, bg)).AlignRight().Text($"{sessionCost:F2} €");
 
                 rowIndex++;
             }
 
-            static IContainer CellStyle(IContainer container, string backgroundColor)
+            static IContainer Cell(IContainer c, string bg) =>
+                c.Border(1).BorderColor(Colors.Grey.Lighten1).Background(bg).Padding(5);
+        });
+    }
+
+    private static void ComposeSignatureAppendix(IContainer container, List<ChargeSession> sessions)
+    {
+        container.Column(column =>
+        {
+            column.Item().Background(Colors.Blue.Darken2).Padding(10)
+                .Text("Anhang: OCMF-Signaturen")
+                .FontSize(14).Bold().FontColor(Colors.White);
+
+            column.Item().PaddingTop(6).PaddingBottom(2)
+                .Text("Die Signaturen können mit einem OCMF-kompatiblen Prüfwerkzeug (z.B. transparenz.software) verifiziert werden.")
+                .FontSize(8).FontColor(Colors.Grey.Darken1).Italic();
+
+            column.Item().PaddingVertical(8).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+
+            foreach (var session in sessions)
             {
-                return container
-                    .Border(1)
-                    .BorderColor(Colors.Grey.Lighten1)
-                    .Background(backgroundColor)
-                    .Padding(5);
+                if (string.IsNullOrEmpty(session.SignedSession)) continue;
+
+                column.Item().Column(entry =>
+                {
+                    entry.Item()
+                        .Text($"{session.StartDateTime:dd.MM.yyyy HH:mm} Uhr  –  {session.Energy:F2} kWh")
+                        .Bold().FontSize(9).FontColor(Colors.Blue.Darken2);
+
+                    entry.Item().PaddingTop(3).PaddingBottom(8)
+                        .Text(ChunkText(session.SignedSession, 130))
+                        .FontSize(6.5f);
+
+                    entry.Item().PaddingBottom(8).LineHorizontal(0.5f).LineColor(Colors.Grey.Lighten2);
+                });
             }
         });
     }
@@ -237,8 +247,7 @@ public class PdfExportService
         container.AlignCenter().AlignBottom().Row(row =>
         {
             row.RelativeItem().AlignLeft().Text("Generated by Zaptec Usage Report")
-                .FontSize(8)
-                .FontColor(Colors.Grey.Darken1);
+                .FontSize(8).FontColor(Colors.Grey.Darken1);
 
             row.RelativeItem().AlignRight()
                 .DefaultTextStyle(x => x.FontSize(8).FontColor(Colors.Grey.Darken1))

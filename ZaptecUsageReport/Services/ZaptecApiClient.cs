@@ -93,7 +93,7 @@ public class ZaptecApiClient
         return report;
     }
 
-    public async Task<List<ChargeSession>> GetChargeHistoryAsync(string? installationId = null, DateTime? fromDate = null, DateTime? toDate = null, int pageSize = 100)
+    public async Task<List<ChargeSession>> GetChargeHistoryAsync(string? installationId = null, DateTime? fromDate = null, DateTime? toDate = null, int pageSize = 200)
     {
         if (string.IsNullOrEmpty(_accessToken) || DateTime.UtcNow >= _tokenExpiry)
         {
@@ -101,18 +101,15 @@ public class ZaptecApiClient
         }
 
         var allSessions = new List<ChargeSession>();
-        var currentPage = 0;
-        var totalPages = 1;
+        string? cursor = null;
 
-        while (currentPage < totalPages)
+        do
         {
-            var request = new RestRequest("/api/chargehistory", Method.Get);
+            var request = new RestRequest("/api/sessions/archived", Method.Get);
             request.AddHeader("accept", "application/json");
             request.AddHeader("Authorization", $"Bearer {_accessToken}");
 
-            // Add query parameters
-            request.AddParameter("PageSize", pageSize);
-            request.AddParameter("PageIndex", currentPage);
+            request.AddParameter("PageSize", Math.Min(pageSize, 200));
 
             if (!string.IsNullOrEmpty(installationId))
             {
@@ -131,6 +128,11 @@ public class ZaptecApiClient
                 request.AddParameter("To", toDateStr);
             }
 
+            if (cursor != null)
+            {
+                request.AddParameter("Cursor", cursor);
+            }
+
             var response = await _client.ExecuteAsync(request);
 
             if (!response.IsSuccessful || response.Content == null)
@@ -138,21 +140,38 @@ public class ZaptecApiClient
                 throw new Exception($"Failed to get charge history: {response.ErrorMessage ?? response.StatusCode.ToString()}");
             }
 
-            var historyResponse = JsonSerializer.Deserialize<ChargeHistoryResponse>(response.Content, new JsonSerializerOptions
+            var archivedResponse = JsonSerializer.Deserialize<ArchivedSessionsResponse>(response.Content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
 
-            if (historyResponse == null)
+            if (archivedResponse == null)
             {
                 break;
             }
 
-            allSessions.AddRange(historyResponse.Data);
-            totalPages = historyResponse.Pages;
-            currentPage++;
-        }
+            allSessions.AddRange(archivedResponse.Sessions.Select(MapToChargeSession));
+            cursor = archivedResponse.HasMore ? archivedResponse.Cursor : null;
+
+        } while (cursor != null);
 
         return allSessions;
     }
+
+    private static ChargeSession MapToChargeSession(ArchivedSession s) => new()
+    {
+        Id = s.Id,
+        DeviceId = s.DeviceId ?? string.Empty,
+        DeviceName = s.DeviceName ?? string.Empty,
+        ChargerName = s.DeviceName ?? string.Empty,
+        ChargerId = s.ChargerId,
+        StartDateTime = s.StartDateTime,
+        EndDateTime = s.EndDateTime ?? DateTime.MinValue,
+        Energy = s.Energy,
+        UserId = s.AuthorizedUser?.Id ?? string.Empty,
+        UserFullName = s.AuthorizedUser?.FullName ?? string.Empty,
+        UserEmail = s.AuthorizedUser?.Email ?? string.Empty,
+        TokenName = s.TokenName ?? string.Empty,
+        SignedSession = s.SessionSignature ?? string.Empty,
+    };
 }
